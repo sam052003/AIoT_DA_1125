@@ -11,7 +11,7 @@ Caps Roman Numerals, Body 10 pt Justified, Captions & References 8 pt).
 AirGuard AI: An Evidence-Grounded Domain AI Agent for Station-Scale Short-Term
 PM2.5 Forecasting and Conservative Outdoor Activity Decision Support
 
-Hung-Yang Lin (7115056179), Ming-Hsien Tsai (7115056013), and Ping-Kun Hsu (8114056002)
+Ming-Hsien Tsai (7115056013), Hung-Yang Lin (7115056179), and Ping-Kun Hsu (8114056002)
 AIoT Data Analytics and Applications (AIoT-DA) Research Group, Team 2
 Taichung, Taiwan
 Repository: https://github.com/sam052003/AirGuard-AI | https://github.com/sam052003/AIoT_DA_1111
