@@ -214,6 +214,9 @@ py -m airguard --dataset AQX_P_13 --live --station-id 32 --limit 500 --max-pages
 
 | 交付／資料 | 最新版本或位置 |
 |---|---|
+| **IEEE ICEIB 會議論文（2020 A–Z SOP 完整版）** | [Overleaf / IEEEtran `main.tex`](ICEIB%20paper/main.tex)｜[純文字版 `main.txt`](ICEIB%20paper/main.txt)｜[A–Z 對照說明](ICEIB%20paper/README.md) |
+| **A2Z 論文架構 SOP 與規範落實度資訊圖表** | [2020 A–Z SOP (`A2Z outline example.pdf`)](myRef/A2Z%20outline%20example.pdf)｜[規範落實度資訊圖表](myRef/AirGuard%20AI%20專題規範落實度資訊圖表.png) |
+| **OpenSpec 規格與變更封存紀錄** | [主規格 (`iceib-a2z-paper-structure`)](openspec/specs/iceib-a2z-paper-structure/spec.md)｜[已封存變更 (`2026-11-25-write-iceib-a2z-ieee-paper`)](openspec/changes/archive/2026-11-25-write-iceib-a2z-ieee-paper/) |
 | **第二組 v3 Deep Research 補強 Word** | [下載 .docx](docs/proposal/AirGuard_AI_Proposal_v3_第二組_DeepResearch_補強.docx) |
 | **第二組 v3 Deep Research 補強簡報** | [下載 .pptx](docs/proposal/AirGuard_AI_Presentation_v3_第二組_DeepResearch_補強.pptx) |
 | v3 可行性修訂 Word／PPT | [Word](docs/proposal/AirGuard_AI_Proposal_Feasible_v3.docx)／[PPT](docs/proposal/AirGuard_AI_Proposal_Presentation_Feasible_v3.pptx) |
