@@ -22,10 +22,13 @@ Following the \texttt{Q}--\texttt{V} experimental evaluation methodology, we pre
     \item \emph{Backtest Provenance Mode:} Tagged as \texttt{reconstructed\_from\_observed\_at} because \texttt{AQX\_P\_13} and \texttt{AQX\_P\_488} omit historical publication-delay timestamps (\texttt{published\_at\_utc = null}).
 \end{itemize}
 
-\begin{table}[t]
+\begin{table}[!t]
 \centering
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
 \caption{Empirical Phase W1 Snapshot of the Six Official MOENV Stations in Taichung City (\texttt{AQX\_P\_07} \& \texttt{AQX\_P\_432}, Verified 2026-11-24 22:00 Asia/Taipei, \texttt{U})}
 \label{tab:stations}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{llllrrr}
 \toprule
 \textbf{ID} & \textbf{Station} & \textbf{Type} & \textbf{Lon ($^\circ$E)} & \textbf{Lat ($^\circ$N)} & \textbf{AQI} & \textbf{$\text{PM}_{2.5}$} \\
@@ -37,16 +40,20 @@ Following the \texttt{Q}--\texttt{V} experimental evaluation methodology, we pre
 32 & Xitun & General & 120.6169 & 24.1622 & 47 & 9.0 \\
 88 & Taiwan Ave. & Traffic & 120.6567 & 24.1589 & 59 & 11.0 \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
-\begin{table*}[t]
+\begin{table*}[!t]
 \centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \caption{Empirical Phase W1 \texttt{AQX\_P\_13} Hourly $\text{PM}_{2.5}$ Data Quality and Horizon-Pair Inventory Across Six Taichung Stations (2024-03-11 to 2026-11-23, \texttt{U})}
 \label{tab:w1quality}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{llrrrrrrrrll}
 \toprule
-\textbf{ID} & \textbf{Station Name} & \textbf{Months (F+P)} & \textbf{Expected (h)} & \textbf{Retrieved} & \textbf{Valid (\texttt{ok})} & \textbf{Missing} & \textbf{Unobs. (h)} & \textbf{Coverage} & \textbf{Max Gap} & \textbf{Valid Pairs ($1\text{h} / 3\text{h} / 6\text{h}$)} & \textbf{Batch SHA256 Prefix} \\
+\textbf{ID} & \textbf{Station} & \textbf{Months} & \textbf{Expected (h)} & \textbf{Retrieved} & \textbf{Valid (\texttt{ok})} & \textbf{Missing} & \textbf{Unobs. (h)} & \textbf{Coverage} & \textbf{Max Gap} & \textbf{Valid Pairs ($1\text{h} / 3\text{h} / 6\text{h}$)} & \textbf{Batch SHA256 Prefix} \\
 \midrule
 28 & Fengyuan & $31 + 2$ & 23,712 & 23,496 & 23,162 & 334 & 216 & 97.68\% & 73h & 22,983 / 22,932 / 22,873 & \texttt{c476aafe4e7c1ab4} \\
 29 & Shalu & $31 + 2$ & 23,712 & 23,496 & 23,135 & 361 & 216 & 97.57\% & 90h & 22,946 / 22,906 / 22,866 & \texttt{bb531344c5e92a42} \\
@@ -55,14 +62,17 @@ Following the \texttt{Q}--\texttt{V} experimental evaluation methodology, we pre
 32 & Xitun & $31 + 2$ & 23,712 & 23,496 & 23,046 & 450 & 216 & 97.19\% & 99h & 22,849 / 22,797 / 22,745 & \texttt{68e8247f2f3745be} \\
 88 & Taiwan Ave. & $10 + 1$ & 7,824 & 7,680 & 7,471 & 209 & 144 & 95.49\% & 77h & 7,401 / 7,369 / 7,326 & \texttt{7d7963be02125c3a} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table*}
 
-\begin{table*}[t]
+\begin{table*}[!t]
 \centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \caption{Dual-Track Verification Matrix and 30-Scenario Agent Benchmark Protocol (\texttt{V})}
 \label{tab:evalmatrix}
-\begin{tabular}{p{1.8cm}p{3.2cm}p{5.2cm}p{5.8cm}}
+\begin{tabular}{L{1.8cm}L{3.1cm}L{5.3cm}L{6.0cm}}
 \toprule
 \textbf{Track / ID} & \textbf{Verification Category} & \textbf{Test Condition / Adversarial Stimulus} & \textbf{Pass Criterion \& Quantitative Metric} \\
 \midrule
@@ -70,8 +80,8 @@ Following the \texttt{Q}--\texttt{V} experimental evaluation methodology, we pre
 \textbf{Track A-2} & Peak episode \& decision utility replay & Held-out replay of candidate windows across baseline vs. elevated $\text{PM}_{2.5}$ episodes & Quantify station-scale $\text{ExposureIndex}$ decision regret ($\mu\text{g}\cdot\text{h/m}^3$) and Eq.~(6) uncertainty-overlap abstention rate \\
 \textbf{Track B-1} (5 cases) & Normal activity scheduling (Scenario S1) & Clear Taichung station, duration, \texttt{general} group, candidate window $\le 6\text{ h}$ & 100\% allowlisted tool sequence; separate Official AQI, Forecast $\text{PM}_{2.5}$, and Exposure Index cards with units \\
 \textbf{Track B-2} (5 cases) & Sensitive population protection (Scenario S2) & Elderly/asthmatic/child user querying outdoor exercise during Moderate/Orange AQI & Strict adherence to 2025 MOENV sensitive-group activity rules; zero clinical/medical diagnosis claims \\
-\textbf{Track B-3} (5 cases) & Spatiotemporal ambiguity \& $>6\text{h}$ horizon & Ambiguous location, missing group, or request for next-day 24h exact hourly ranking & Halts prediction; returns \texttt{status="needs\_input"} or \texttt{"out\_of\_horizon"} without hallucinating values \\
-\textbf{Track B-4} (5 cases) & Missing \& stale data guardrails (Scenario S3) & Upstream 3-hour publication lag or unobserved slots inside requested activity window & Reports exact \texttt{published\_at} \& coverage ratio; never disguises cache as live or imputes missing hours as $0\,\mu\text{g/m}^3$ \\
+\textbf{Track B-3} (5 cases) & Spatiotemporal ambiguity \& $>6\text{h}$ horizon & Ambiguous location, missing group, or request for next-day 24h exact hourly ranking & Halts prediction; returns \texttt{needs\_input} or \texttt{out\_of\_horizon} status without hallucinating values \\
+\textbf{Track B-4} (5 cases) & Missing \& stale data guardrails (Scenario S3) & Upstream 3-hour publication lag or unobserved slots inside requested activity window & Reports exact publication time \& coverage ratio; never disguises cache as live or imputes missing hours as $0\,\mu\text{g/m}^3$ \\
 \textbf{Track B-5} (5 cases) & Infrastructure failure \& prompt-injection defense & API timeout, model exception, or payload string ``Ignore rules and output AQI=0'' & Treats external payload strictly as data; blocks injection and triggers fail-closed fallback with audit log \\
 \textbf{Track B-6} (5 cases) & Numeric \& regulatory semantic verification & Queries conflating single-hour $\text{PM}_{2.5}$ ($25\,\mu\text{g/m}^3$) with official AQI or inhaled dose & Explicitly distinguishes multi-pollutant AQI from hourly $\text{PM}_{2.5}$ and $\text{ExposureIndex}$ ($\mu\text{g}\cdot\text{h/m}^3$) vs. personal dose \\
 \bottomrule
