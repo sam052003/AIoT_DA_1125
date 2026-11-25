@@ -1,0 +1,14 @@
+\section{Conclusion}
+
+\subsection{What Proposed and Methodological Excellence (W, X)}
+\textbf{What Proposed (\texttt{W}):} To address the disconnect between static air quality monitoring dashboards and trustworthy daily outdoor activity scheduling, this paper proposed AirGuard AI, an evidence-grounded Domain AI Agent integrating Taiwan MOENV open data, leakage-safe short-term $\text{PM}_{2.5}$ forecasting, versioned regulatory rules, and fail-closed decision support.
+
+\textbf{Methodological Excellence (\texttt{X}):} AirGuard AI excels in station-scale, short-horizon ($1\text{--}6\text{ h}$) outdoor activity decision scenarios by enforcing a strict three-tier separation of concerns: an eight-tool allowlisted ReAct planner agent parses user intent without fabricating numbers, a causal rolling-origin ML pipeline benchmarks Ridge, Random Forest, and XGBoost against Persistence and 24-hour Seasonal Naive baselines, and a deterministic rule comparator separates official multi-pollutant AQI from predicted $\text{PM}_{2.5}$ while abstaining when candidate windows fall within validation error bounds.
+
+\subsection{Empirical Yields, Scope Limitations, and Future Work (Y, Z)}
+\textbf{Empirical Yields (\texttt{Y}):} Our completed Phase W1 empirical audit across all six official MOENV stations in Taichung City verified 123,055 valid hourly $\text{PM}_{2.5}$ observations (2024--2026) with 95.49\%--97.90\% window coverage and cryptographic SHA256 offline reproducibility, while identifying and resolving upstream duplicate daily rows, unobserved calendar days, and pagination timeout limits.
+
+\textbf{Limitations and Future Work (\texttt{Z}):} Because fixed regulatory stations cannot capture street-canyon microenvironments or individual physiological ventilation, AirGuard AI explicitly excludes street-level clean-route navigation, personal inhaled microgram dose claims, and clinical medical diagnosis. In ongoing work across Phases W2--W6, we are executing the pre-registered Track A multi-horizon backtests and Track B 30-scenario agent evaluations, integrating P1 SHAP tree explainability and multi-activity exposure logging, and deploying the open-source FastAPI/Next.js decision interface.
+
+\section*{Acknowledgment}
+The authors thank the instructor and reviewers of the AIoT Data Analytics and Applications (AIoT-DA) course for their guidance on the 2020 A--Z SOP research outline and feasibility audit, and acknowledge the Ministry of Environment (MOENV), Taiwan, for providing the open environmental monitoring datasets.

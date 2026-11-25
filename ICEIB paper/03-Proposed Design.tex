@@ -1,0 +1,200 @@
+\section{Proposed Design}
+
+Following the systematic \texttt{PA}--\texttt{PM} design methodology, this section presents the problem statement, data foundation, dual-track paradigm, eight-module architecture, mathematical formulation, fail-closed flowchart, line-numbered algorithms, concrete user scenarios, and deterministic verification bounds of AirGuard AI.
+
+\subsection{Aim, Data Background, Dual-Track Cure, and Paradigm Shift (PA--PD)}
+\textbf{Aim (\texttt{PA}):} Given a user query $Q$ specifying a target location/station in Taichung City, an outdoor activity type, a planned duration $\Delta t \le 6\text{ h}$, a candidate time window within the next 6 hours, and a population group $g \in \{\texttt{general}, \texttt{sensitive}\}$, AirGuard AI aims to generate an evidence-grounded, uncertainty-aware decision response $R_{\text{out}}$ that compares eligible activity windows while preserving cryptographic data provenance and regulatory consistency.
+
+\textbf{Background and Open Data Foundation (\texttt{PB}):} The system operates directly on four official Taiwan MOENV open datasets (Table~\ref{tab:datasets}) accessed via REST API v2 (\texttt{https://data.moenv.gov.tw/api/v2/\{DATASET\}}) with server-side key resolution (\texttt{MOENV\_API\_KEY}) or SHA256-verified offline snapshots.
+
+\textbf{Dual-Track Cure and Cause (\texttt{PC}):} Because official AQI is a regulatory multi-pollutant composite index whereas short-term ML models predict single-pollutant raw hourly $\text{PM}_{2.5}$ ($\mu\text{g/m}^3$), AirGuard AI enforces a \emph{dual-track evidence separation}: current risk tiering is anchored strictly to official published AQI (\texttt{AQX\_P\_432}) and 2025 MOENV activity rules, while temporal window comparison across $h \in \{1, 3, 6\}\text{ h}$ relies on version-locked $\text{PM}_{2.5}$ forecasts and validation error bands.
+
+\textbf{Design Paradigm Shift (\texttt{PD}):} Unlike conventional dashboards that dump raw pollutant tables or unconstrained chatbots that generate free-text health advice, AirGuard AI shifts the paradigm to \emph{Planner--Analytics--Domain Rule Decoupling}: the LLM never invents numbers or overrides regulatory thresholds, and every output card is bound to a verified tool trace.
+
+\begin{table}[t]
+\centering
+\caption{Official MOENV Open Datasets and Governance Rules (\texttt{PB})}
+\label{tab:datasets}
+\begin{tabular}{p{1.4cm}p{2.6cm}p{3.8cm}}
+\toprule
+\textbf{Dataset} & \textbf{Core Verified Fields} & \textbf{System Role \& Governance Rule} \\
+\midrule
+\texttt{AQX\_P\_07} \cite{aqxp07} & \texttt{siteid, sitename, county, township, twd97lon, twd97lat, sitetype} & Official station registry \& TWD97 coordinates (80 national; 6 in Taichung); does not represent street-canyon gradients \\
+\texttt{AQX\_P\_432} \cite{aqxp432} & \texttt{siteid, aqi, status, pollutant, pm2.5, pm2.5\_avg, publishtime} & Real-time official AQI \& current-hour $\text{PM}_{2.5}$; strictly separates \texttt{official\_aqi}, raw \texttt{pm2.5}, and \texttt{pm2.5\_avg} \\
+\texttt{AQX\_P\_488} \cite{aqxp488} & \texttt{siteid, datacreationdate, aqi, pm2.5, windspeed, winddirec} & Historical AQI \& co-located wind reference; \texttt{published\_at\_utc} is preserved as \texttt{null} \\
+\texttt{AQX\_P\_13} \cite{aqxp13} & \texttt{siteid, itemid="33", itemunit="ug/m3", monitordate, monitorvalue00..23} & Primary hourly $\text{PM}_{2.5}$ series; wide-to-long expansion of 24 daily slots with deduplication \& QC flags \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{System Elements, Architecture Graph, and Operational Mechanism (PE, PG, PH)}
+AirGuard AI consists of eight numbered modules (\textcircled{\scriptsize 1}--\textcircled{\scriptsize 8}, \texttt{PE}) arranged in the architectural graph and fail-closed decision flow depicted in Fig.~\ref{fig:arch} (\texttt{PG}):
+\begin{itemize}
+    \item \textbf{\textcircled{\scriptsize 1} User / Web UI:} Captures station selection on a TWD97 map, activity type, duration, sensitivity group, and candidate time window.
+    \item \textbf{\textcircled{\scriptsize 2} Query Interpreter:} Parses natural language into the canonical \texttt{query.schema.json} contract (\texttt{Asia/Taipei} display, UTC internal storage) and requests clarification if required fields are missing or ambiguous.
+    \item \textbf{\textcircled{\scriptsize 3} Constrained Planner Agent:} Executes a ReAct loop restricted to an eight-tool allowlist (\texttt{PH}): \texttt{list\_stations}, \texttt{get\_official\_aqi}, \texttt{get\_pm25\_history}, \texttt{forecast\_pm25}, \texttt{get\_official\_guidance}, \texttt{compare\_windows}, \texttt{estimate\_exposure\_index}, and \texttt{verify\_output}.
+    \item \textbf{\textcircled{\scriptsize 4} MOENV Data Acquisition \& Quality Gate:} Retrieves live or snapshot records, enforcing five formal data contracts (\texttt{Observation}, \texttt{OfficialAQI}, \texttt{Forecast}, \texttt{ActivityWindow}, \texttt{AgentResponse}) and checking three distinct timestamps (\texttt{observed\_at\_utc}, \texttt{published\_at\_utc}, \texttt{retrieved\_at\_utc}).
+    \item \textbf{\textcircled{\scriptsize 5} $\text{PM}_{2.5}$ Forecast \& Analytics Engine:} Computes causal lag/rolling features at origin $t$, produces $h \in \{1, 3, 6\}\text{ h}$ predictions from frozen models, attaches validation error bands, and supports P1 SHAP attributions.
+    \item \textbf{\textcircled{\scriptsize 6} Versioned Official AQI Domain Rules:} Applies Taiwan MOENV's 2025 six-tier AQI breakpoints and differentiated activity guidance for general vs. sensitive groups \cite{moenv2025aqi}.
+    \item \textbf{\textcircled{\scriptsize 7} Conservative Activity Window Comparator:} Evaluates candidate intervals within 6 hours, computes the station-scale concentration-time exposure index, and abstains from ranking statistically indistinguishable windows.
+    \item \textbf{\textcircled{\scriptsize 8} Evidence-Grounded Output \& Audit Logger:} Validates the payload against \texttt{report.schema.json}, rendering separate cards for Official AQI, Predicted $\text{PM}_{2.5}$, and Station Exposure Index with citations, disclaimers, and a redacted \texttt{trace\_id}.
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\scriptsize
+\begin{verbatim}
++----------------------------------------------------------+
+| [1] User / Web UI (Station, Activity, Duration, Group)   |
++----------------------------+-----------------------------+
+                             v
++----------------------------------------------------------+
+| [2] Query Interpreter (Schema & <=6h Horizon Check)      |
++----------------------------+-----------------------------+
+                             v
++----------------------------------------------------------+
+| [3] Constrained Planner Agent (8-Tool Allowlist ReAct)   |
++----------------------------+-----------------------------+
+                             v
++----------------------------------------------------------+
+| [4] MOENV Data Acquisition (AQX_P_432, 13, 488, 07)      |
++----------------------------+-----------------------------+
+                             v
+              +--------------+--------------+
+              | Quality Check: Source, Unit,|
+              | Freshness & Coverage Valid? |
+              +------+---------------+------+
+                     | Yes           | No (Stale/Missing)
+                     v               |
++---------------------------------+  |
+| [5] PM2.5 Analytics (1/3/6h ML) |  |
++----------------+----------------+  |
+                 v                   |
++---------------------------------+  |
+| [6] 2025 MOENV AQI Domain Rules |  |
++----------------+----------------+  |
+                 v                   v
++---------------------------------+ +----------------------+
+| [7] Activity Window Comparator  | | Fail-Closed Fallback |
+|     ExposureIndex & Abstention  | | Status: partial /    |
++----------------+----------------+ | unavailable + Source |
+                 +---------+--------+----------------------+
+                           v
++----------------------------------------------------------+
+| [8] Evidence-Grounded Output Cards & Redacted Audit Log  |
++----------------------------------------------------------+
+\end{verbatim}
+\caption{Eight-module system architecture (\textcircled{\scriptsize 1}--\textcircled{\scriptsize 8}, \texttt{PG}) and fail-closed quality-check flowchart (\texttt{PI}) of AirGuard AI.}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Mathematical Formulations and Algorithmic Implementation (PF, PI, PM)}
+\textbf{Multi-Horizon Forecasting and Skill Formulation (\texttt{PF}):} Let $y_{s,t}$ denote the raw hourly observed $\text{PM}_{2.5}$ concentration ($\mu\text{g/m}^3$) at station $s$ and discrete hour $t$. For horizons $h \in \{1, 3, 6\}\text{ h}$, the causal feature vector $\mathbf{x}_{s,t}$ uses only observations available at origin $t$: lags $l \in \{1, 3, 6, 12, 24\}\text{ h}$, backward rolling statistics (mean, standard deviation, min, max over $[t-w+1, t]$ for $w \in \{3, 6, 24\}\text{ h}$), cyclical hour/weekday encodings, missingness flags, and verified co-located wind vectors. Candidate ML models (Ridge, Random Forest, XGBoost) are benchmarked against Persistence and 24-hour Seasonal Naive baselines on the exact same valid sample pairs $N_{s,h}$:
+\begin{equation}
+\hat{y}_{\text{pers}}(t+h \mid t) = y(t), \quad \hat{y}_{\text{snaive}}(t+h \mid t) = y(t+h-24),
+\end{equation}
+\begin{equation}
+\text{MAE}_{s,h} = \frac{1}{|N_{s,h}|} \sum_{t \in N_{s,h}} |y_{s,t+h} - \hat{y}_{s,t+h \mid t}|,
+\end{equation}
+\begin{equation}
+\text{RMSE}_{s,h} = \sqrt{\frac{1}{|N_{s,h}|} \sum_{t \in N_{s,h}} (y_{s,t+h} - \hat{y}_{s,t+h \mid t})^2},
+\end{equation}
+\begin{equation}
+\text{Skill}_{\text{MAE}}(s,h) = 1 - \frac{\text{MAE}_{\text{model}}(s,h)}{\text{MAE}_{\text{pers}}(s,h)}.
+\end{equation}
+
+\textbf{Station-Scale Exposure Proxy and Uncertainty Abstention Bound (\texttt{PF}, \texttt{PM}):} For a candidate activity window $W$ partitioned into sub-intervals $i$ of duration $\Delta t_i$ (hours) with verified station or forecasted concentration $C_s(t_i)$ ($\mu\text{g/m}^3$), the station-scale concentration-time exposure index is defined as:
+\begin{equation}
+\text{ExposureIndex}(W) = \sum_{i \in W} C_s(t_i) \times \Delta t_i \quad [\mu\text{g}\cdot\text{h/m}^3].
+\end{equation}
+To guarantee deterministic decision safety (\texttt{PM}), let $\bar{C}(W) = \text{ExposureIndex}(W) / \sum_{i \in W} \Delta t_i$ denote the window-mean predicted concentration and $\tau_{\text{err}}(s,h) = \text{MAE}_{\text{valid}}(s,h)$ denote the validation error margin. When comparing two candidate windows $W_1$ and $W_2$, the comparator enforces the abstention bound:
+\begin{equation}
+\big|\bar{C}(W_1) - \bar{C}(W_2)\big| < \tau_{\text{err}}(s,h) \implies \text{Decision} = \texttt{Abstain\_Rank}.
+\end{equation}
+Equation~(6) mathematically prevents the agent from issuing false high-confidence rankings when inter-window differences lie within model error noise. Furthermore, if any sub-interval $i \in W$ has \texttt{quality\_flag} $\neq \texttt{ok}$, $\text{ExposureIndex}(W)$ is flagged as partial/unknown rather than substituting $0\,\mu\text{g/m}^3$. Algorithms~1 and 2 (\texttt{PI}) formalize the leakage-safe training pipeline and the runtime evidence-grounded agent loop.
+
+\begin{figure}[t]
+\centering
+\scriptsize
+\begin{verbatim}
+Algorithm 1: Leakage-Safe Multi-Horizon Training & Backtesting
+Input : Station hourly data D_raw, horizons H={1,3,6}, split (70/15/15)
+Output: Frozen versioned models M_frozen, evaluation report R_eval
+01: D <- StandardizeUnitsAndTimezones(D_raw, unit="ug/m^3", tz="UTC")
+02: D <- ReconcileDuplicatesAndQC(D, policy="dedup_identical", max=1000.0)
+03: D <- SortChronologicallyByStationAndTime(D)
+04: for each station s in Stations(D) do
+05:   for each horizon h in H do
+06:     (X_sh, y_sh, mask) <- BuildCausalLagRollingPairs(D_s, cutoff=t)
+07:     (Train, Valid, Test) <- ChronologicalSplit(X_sh, y_sh, mask)
+08:     p_pers <- PredictPersistence(Valid, Test, h)
+09:     p_snaive <- PredictSeasonalNaive24h(Valid, Test, h)
+10:     Candidates <- {Ridge, RandomForest, XGBoost}
+11:     TuneOnRollingOrigin(Candidates, Train, Valid, fit_on_train_only=true)
+12:     m_best <- SelectByValidMAEAndLatency(Candidates, p_pers, p_snaive)
+13:     FreezeModel(m_best, sha256=Hash(D_s)); p_test <- PredictOnce(m_best, Test)
+14:     CompareToBaselines(p_test, p_pers, p_snaive, metrics={MAE,RMSE,Skill})
+15:     StratifyByStationHorizonAndPollutionEpisode(R_eval[s,h])
+16:     CalibrateResidualErrorBands(m_best, Valid)
+17:     AnnotateMode(R_eval[s,h], mode="reconstructed_from_observed_at")
+18:   end for
+19: end for
+20: return M_frozen, R_eval
+\end{verbatim}
+\vspace{-0.2cm}
+\begin{verbatim}
+Algorithm 2: Evidence-Grounded AirGuard Decision Agent (Runtime)
+Input : User query Q, context C_ctx, allowlisted tools T_allow
+Output: Verified AgentResponse R_out with audit trace
+01: req <- ParseIntent(Q, C_ctx, tz="Asia/Taipei")
+02: if MissingRequiredFields(req) then return AskClarification(req)
+03: station <- InvokeTool(T_allow.list_stations, req.location)
+04: if station is ambiguous then return ListCandidateStations(req.location)
+05: if not ValidateHorizon(req.time_window, max_h=6) then
+06:   return OutOfHorizonResponse(limit="6 hours", official_link=MOENV_URL)
+07: end if
+08: live <- InvokeTool(T_allow.get_official_aqi, station.id)
+09: hist <- InvokeTool(T_allow.get_pm25_history, station.id, hours=24)
+10: qc <- ValidateTimestampUnitFreshnessAndCoverage(live, hist)
+11: if qc.is_stale or qc.is_insufficient then
+12:   return SafeFallback(status="partial_or_unavailable", qc, live)
+13: end if
+14: latest_aqi <- live.official_aqi  // Strictly NOT model output
+15: forecasts <- InvokeTool(T_allow.forecast_pm25, station.id, H={1,3,6})
+16: guidance <- InvokeTool(T_allow.get_official_guidance, latest_aqi, req.group)
+17: windows <- InvokeTool(T_allow.compare_windows, req, forecasts, guidance)
+18: exposure <- InvokeTool(T_allow.estimate_exposure_index, windows, req.dur)
+19: R_draft <- ComposeSeparateCards(latest_aqi, forecasts, exposure, guidance)
+20: if not InvokeTool(T_allow.verify_output, R_draft).passed then
+21:   R_draft <- SafeFallback(status="partial", qc, live)
+22: end if
+23: LogRedactedAuditTrace(req, R_draft); return R_draft
+\end{verbatim}
+\caption{Line-numbered pseudocode (\texttt{PI}) for Algorithm~1 (Time-Safe Forecasting) and Algorithm~2 (Evidence-Grounded Agent).}
+\label{fig:algos}
+\end{figure}
+
+\subsection{Concrete Application Scenarios, Key Contributions, and Simulation Link (PJ, PK, PL)}
+\textbf{Jump to Concrete Examples (\texttt{PJ}):} Table~\ref{tab:scenarios} illustrates how AirGuard AI executes three representative real-world scenarios (\texttt{S1}--\texttt{S3}):
+\begin{itemize}
+    \item \emph{Scenario S1 (Morning Jogging Window Selection):} A general-group user queries at 07:00 for a 40-minute run near Xitun Station (\texttt{siteid=32}) within the next 3 hours. The agent retrieves official AQI $= 47$ (Good), generates 1h and 3h $\text{PM}_{2.5}$ forecasts, computes $\text{ExposureIndex}$ in $\mu\text{g}\cdot\text{h/m}^3$, and compares candidate slots if their difference exceeds $\tau_{\text{err}}$.
+    \item \emph{Scenario S2 (Sensitive Population Protection):} An asthmatic user requests outdoor exercise when official AQI is in the Moderate/Orange tier. Module~\textcircled{\scriptsize 6} prioritizes 2025 MOENV sensitive-group rules, recommending reduced prolonged exertion and explicitly abstaining from clinical medical diagnosis.
+    \item \emph{Scenario S3 (Stale Data or API Exception Fallback):} When \texttt{AQX\_P\_432} exhibits a 3-hour publication lag or network timeout, Module~\textcircled{\scriptsize 4} fails the freshness check and routes directly to Fail-Closed Safe Degradation (\texttt{status="partial"} or \texttt{"unavailable"}), displaying the exact \texttt{published\_at} timestamp without disguising cached or predicted values as live official AQI.
+\end{itemize}
+
+\begin{table}[t]
+\centering
+\caption{Representative Execution Scenarios (\texttt{PJ}: S1--S3)}
+\label{tab:scenarios}
+\begin{tabular}{p{1.2cm}p{2.2cm}p{2.4cm}p{2.0cm}}
+\toprule
+\textbf{Scenario} & \textbf{User Input Context} & \textbf{Agent \& Rule Workflow} & \textbf{Verified Output} \\
+\midrule
+\textbf{S1} Morning Run & Taichung Xitun (\texttt{32}), 07:00, 40 min, \texttt{general} group, next 3h & Fetch \texttt{AQX\_P\_432} AQI $\rightarrow$ 1/3h $\text{PM}_{2.5}$ forecast $\rightarrow$ check Eq.~(6) bound & Separate AQI card, 1/3h $\text{PM}_{2.5}$ trend, $\mu\text{g}\cdot\text{h/m}^3$ proxy \& citations \\
+\textbf{S2} Sensitive Group & Specified station, \texttt{sensitive} group, elevated AQI episode & 2025 MOENV sensitive-group rule priority; conservative risk framing & Official activity restriction card + non-medical disclaimer \\
+\textbf{S3} Data Anomaly & API timeout, 3h stale \texttt{published\_at}, or $>6\text{h}$ request & Quality gate triggers fail-closed fallback (Algorithm~2, lines 11--13) & Explicit staleness/missingness notice; zero fabricated live metrics \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Design Contributions and Transition to Simulation (\texttt{PK}, \texttt{PL}):} By uniting cryptographic data snapshots, past-only feature construction, and deterministic tool verification (\texttt{PK}), every module in Fig.~\ref{fig:arch} produces a machine-testable artifact. Section~IV details how these artifacts are empirically audited on real Taichung station data and evaluated under our dual-track benchmark (\texttt{PL}).

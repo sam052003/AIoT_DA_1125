@@ -1,0 +1,18 @@
+\begin{abstract}
+% [A. Attention Getter / Motivation]
+Ambient air pollution remains a major global environmental health hazard; the World Health Organization (WHO) estimates that outdoor air pollution caused approximately 4.2 million premature deaths worldwide in 2019, and while Taiwan's Ministry of Environment (MOENV) reports that national annual mean fine particulate matter ($\text{PM}_{2.5}$) declined from $16.2\,\mu\text{g/m}^3$ in 2019 to $12.8\,\mu\text{g/m}^3$ in 2025 (an approximate 21\% long-term reduction), macro-level annual averages cannot resolve station-specific, hour-to-hour exposure risks when citizens schedule outdoor activities.
+% [B. But / Challenge]
+However, existing public monitoring platforms primarily display static current conditions while leaving users to manually reconcile short-term concentration trajectories, activity duration, population vulnerability, data freshness, and predictive uncertainty; meanwhile, machine learning (ML) forecast models frequently suffer from temporal data leakage, and unconstrained large language models (LLMs) risk hallucinating environmental readings or conflating single-pollutant predictions with official multi-pollutant Air Quality Index (AQI) ratings.
+% [C. Cure / Proposed Solution]
+To address these challenges, we propose AirGuard AI, an evidence-grounded Domain AI Agent for station-scale short-term $\text{PM}_{2.5}$ forecasting and conservative outdoor activity decision support.
+% [D. Development / Method]
+Designed around six official MOENV monitoring stations in Taichung City as a pilot domain, AirGuard AI integrates four official open datasets (\texttt{AQX\_P\_432} real-time AQI, \texttt{AQX\_P\_13} hourly $\text{PM}_{2.5}$ observations, \texttt{AQX\_P\_488} historical records, and \texttt{AQX\_P\_07} TWD97 station metadata) with versioned 2025 MOENV activity guidelines, benchmarking Ridge regression, Random Forest, and XGBoost against Persistence and 24-hour Seasonal Naive baselines across 1-, 3-, and 6-hour horizons while a tool-allowlisted ReAct planner agent orchestrates deterministic tools, station-scale concentration-time exposure indexing ($\mu\text{g}\cdot\text{h/m}^3$), and fail-closed safety degradation.
+% [E. Experiments / Evaluation]
+To evaluate our proposed scheme, we report the completed Phase W1 empirical data quality engineering and cryptographic SHA256 snapshot verification across 123,055 valid hourly observations from the six Taichung stations (2024--2026), paired with a dual-track validation protocol combining chronological 70/15/15 rolling-origin backtesting (Track A) and a 30-scenario adversarial and boundary agent test suite (Track B).
+% [F. Findings / Expected Outcomes]
+Empirical Phase W1 results confirm 95.49\%--97.90\% station window coverage while resolving five upstream data anomalies (duplicate daily rows, unobserved calendar days, instrument ceiling thresholding, pagination timeouts, and missing publication-delay logs), establishing an auditable station-scale decision prototype whose final predictive skill scores and decision efficacy are governed by pre-registered ongoing experiments without claiming street-level navigation, personal inhaled dose, or clinical diagnosis.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Air Quality Index (AQI), Decision Support Systems, Domain AI Agent, Explainable AI (SHAP), Internet of Things (IoT) Open Data, $\text{PM}_{2.5}$ Time-Series Forecasting, ReAct Tool Calling.
+\end{IEEEkeywords}
