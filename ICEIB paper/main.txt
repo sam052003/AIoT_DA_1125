@@ -1,0 +1,991 @@
+================================================================================
+IEEE INTERNATIONAL CONFERENCE ON ELECTRONIC COMMUNICATIONS, INTERNET OF THINGS
+AND BIG DATA (ICEIB) — CAMERA-READY / FULL PAPER MANUSCRIPT (www.iceib.asia)
+Format Specification: Standard IEEE Two-Column Conference Template (A4 Paper,
+210 mm x 297 mm; Top 19 mm, Bottom 43 mm, Left/Right 14.32 mm, Column Gap
+4.22 mm; Times New Roman: Title 24 pt Bold, Authors 11 pt, Affiliations 10 pt
+Italic, Abstract/Index Terms 9 pt Bold Italic, Section Headings 10 pt Small
+Caps Roman Numerals, Body 10 pt Justified, Captions & References 8 pt).
+================================================================================
+
+AirGuard AI: An Evidence-Grounded Domain AI Agent for Station-Scale Short-Term
+PM2.5 Forecasting and Conservative Outdoor Activity Decision Support
+
+Hung-Yang Lin (7115056179), Ming-Hsien Tsai (7115056013), and Ping-Kun Hsu (8114056002)
+AIoT Data Analytics and Applications (AIoT-DA) Research Group, Team 2
+Taichung, Taiwan
+Repository: https://github.com/sam052003/AirGuard-AI | https://github.com/sam052003/AIoT_DA_1111
+
+--------------------------------------------------------------------------------
+Abstract—Ambient air pollution remains a major global environmental health risk.
+According to the World Health Organization (WHO), outdoor air pollution caused
+approximately 4.2 million premature deaths worldwide in 2019. In Taiwan, data
+from the Ministry of Environment (MOENV) show that the national annual mean fine
+particulate matter (PM2.5) concentration declined from 16.2 ug/m^3 in 2019 to
+12.8 ug/m^3 in 2025, representing an approximate 21% long-term improvement;
+however, macro-level annual averages do not directly resolve station-specific,
+short-term exposure risks when citizens schedule outdoor activities. Existing
+public monitoring dashboards primarily display current air quality status while
+leaving users to manually reconcile short-term concentration trajectories,
+activity duration, population vulnerability, data freshness, and predictive
+uncertainty. Conversely, unconstrained large language models (LLMs) risk
+hallucinating environmental metrics or conflating single-pollutant predictions
+with official multi-pollutant Air Quality Index (AQI) ratings. To address this
+gap, this paper proposes AirGuard AI, an evidence-grounded Domain AI Agent for
+station-scale short-term PM2.5 forecasting and conservative outdoor activity
+decision support. Using six official MOENV monitoring stations in Taichung City
+as a pilot domain, AirGuard AI integrates four official open datasets (AQX_P_432
+real-time AQI, AQX_P_13 hourly PM2.5 observations, AQX_P_488 historical AQI
+records, and AQX_P_07 TWD97 station coordinates) with versioned MOENV activity
+guidelines. The analytics layer benchmarks Ridge regression, Random Forest, and
+XGBoost against Persistence and 24-hour Seasonal Naive baselines across 1-, 3-,
+and 6-hour forecast horizons under chronological splitting (70/15/15) and
+rolling-origin evaluation, reporting Mean Absolute Error (MAE), Root Mean
+Square Error (RMSE), and Skill Score. A tool-allowlisted ReAct planner agent
+interprets user activity contexts, invokes deterministic data and model tools,
+verifies timestamp provenance, compares eligible candidate activity windows, and
+computes a station-scale concentration-time exposure index (ug*h/m^3) alongside
+explicit uncertainty bounds. We report the completed Phase W1 empirical data
+quality engineering and cryptographic SHA256 snapshot verification across
+131,160 retrieved hourly slots from the six Taichung stations (2024-2026), and
+detail a 30-scenario dual-track validation protocol covering agent tool
+selection, citation fidelity, regulatory compliance, and fail-closed degradation
+when data are stale or differences fall within model error bounds.
+
+Index Terms—Air Quality Index (AQI), Decision Support Systems, Domain AI Agent,
+Explainable AI (SHAP), Internet of Things (IoT) Open Data, PM2.5 Time-Series
+Forecasting, ReAct Tool Calling.
+--------------------------------------------------------------------------------
+
+
+I. INTRODUCTION
+
+A. Motivation and Public Health Context
+Ambient air pollution continues to pose a persistent threat to human health and
+daily outdoor mobility. The World Health Organization (WHO) estimates that in
+2019, 99% of the global population resided in areas failing to meet WHO air
+quality guideline levels, with ambient (outdoor) air pollution accounting for
+approximately 4.2 million premature deaths worldwide [1], [2]. In Taiwan,
+regulatory mitigation efforts documented by the Ministry of Environment (MOENV)
+have reduced the national annual mean concentration of fine particulate matter
+with an aerodynamic diameter of 2.5 um or less (PM2.5) from 16.2 ug/m^3 in 2019
+to 12.8 ug/m^3 in 2025, an overall improvement of roughly 21% [3], [4]. Despite
+this encouraging macro-scale trend, an annual national average operates on a
+fundamentally different spatiotemporal scale than an individual's immediate
+daily decision, such as determining which 40-minute window over the next three
+hours is comparatively safer for outdoor jogging or commuting near a specific
+monitoring station. Diurnal meteorology, local traffic emissions, and seasonal
+transboundary episodes still induce rapid hour-to-hour fluctuations that require
+short-term, localized, and context-aware decision interpretation.
+
+B. Application Background and Spatiotemporal Granularity
+To support public environmental awareness without requiring proprietary sensor
+deployments, Taiwan's MOENV Open Data Platform publishes station-level real-time
+Air Quality Index (AQI) reports (dataset AQX_P_432), hourly pollutant
+observations updated daily (AQX_P_13), historical AQI and meteorological series
+(AQX_P_488), and official monitoring station metadata with TWD97 coordinates
+(AQX_P_07) [5]-[8]. For general exercisers, outdoor workers, and sensitive
+subpopulations (e.g., children, older adults, and individuals with respiratory
+or cardiovascular conditions), a practical query is rarely a static lookup of
+"What is the current AQI?" Instead, users seek forward-looking comparative
+guidance: "Given my sensitivity group and a planned 40-minute outdoor activity
+near Xitun Station in Taichung within the next six hours, which candidate time
+window carries lower station-scale exposure, and how reliable is the underlying
+data?" Answering such queries requires bridging raw IoT environmental open data,
+short-term time-series forecasting, regulatory health guidance, and transparent
+uncertainty communication at the monitoring-station scale.
+
+C. Problem Definition and Existing Limitations
+Transforming public air quality data into trustworthy activity recommendations
+faces four structural limitations in existing literature and consumer platforms:
+
+1) Spatiotemporal and Provenance Ambiguity: Public dashboards and third-party
+applications frequently conflate observation time (observed_at), official release
+time (published_at), and client retrieval time (retrieved_at). Furthermore,
+upstream sensor maintenance or transmission dropouts produce missing hourly
+slots that naive pipelines erroneously impute as zero concentration (0 ug/m^3),
+falsely signaling clean air. Equally problematic is spatial over-extrapolation:
+fixed regulatory stations characterize regional or neighborhood-scale ambient
+air, which cannot independently validate street-by-street microenvironmental
+gradients or "cleanest route" navigation rankings without co-located mobile
+monitoring [9], [10].
+
+2) Regulatory Semantic Divergence Between AQI and PM2.5: Under Taiwan's MOENV
+AQI standard (including the revised sub-index concentration thresholds effective
+January 1, 2025), the official AQI is a composite maximum sub-index derived
+across six criteria pollutants (O3, PM2.5, PM10, CO, SO2, and NO2), each
+governed by distinct moving-average time windows [11]. Predicting future raw
+hourly PM2.5 concentrations and presenting them as "predicted official AQI"
+violates regulatory semantics and misleads end users.
+
+3) Forecasting Pitfalls and the Accuracy-Decision Gap: Many machine learning
+(ML) studies on PM2.5 prediction rely on random train-test splits or future-
+looking rolling statistics that introduce temporal data leakage, inflating
+reported accuracy while failing to benchmark against simple yet strong baselines
+such as Persistence and Seasonal Naive [12]-[14]. Moreover, recent empirical
+evidence in environmental decision planning demonstrates that a forecast model
+achieving a lower overall Mean Absolute Error (MAE) does not automatically yield
+superior decisions regarding whether or when to schedule outdoor activities,
+particularly when candidate time windows differ by less than the model's
+validation error or when peak pollution episodes are smoothed out [15].
+
+4) Unconstrained Generative AI Risks: While Large Language Models (LLMs) excel
+at parsing natural language intent, deploying an unconstrained conversational
+agent over environmental APIs introduces severe reliability hazards, including
+numeric hallucination, silent use of stale cache snapshots as live observations,
+susceptibility to indirect prompt injection embedded in external payloads, and
+unauthorized medical diagnosis [16]-[18].
+
+D. Proposed Innovations and Expected Contributions
+To overcome these limitations, this paper presents AirGuard AI (v3 specification),
+an evidence-grounded Domain AI Agent designed around strict tool allowlisting,
+dual-track separation of official AQI and predicted hourly PM2.5, and fail-
+closed degradation. Rather than treating the system as an unconstrained chatbot
+or an isolated black-box regressor, AirGuard AI enforces a verifiable contract
+across data ingestion, short-term forecasting, regulatory rule lookup, and
+conservative window comparison. The primary contributions of this work are:
+
+1) Reproducible MOENV Data Engineering and Cryptographic Provenance (Verified in
+Phase W1): We design and empirically validate a Python ingestion and quality-
+control pipeline over four MOENV datasets across all six official monitoring
+stations in Taichung City (Fengyuan, Shalu, Dali, Zhongming, Xitun, and Taiwan
+Avenue). The pipeline resolves upstream duplicate daily records, trailing date
+whitespace, and unobserved calendar days while preserving raw paginated API
+bytes with SHA256 manifests for deterministic offline replay.
+
+2) Leakage-Safe Multi-Horizon PM2.5 Benchmarking Protocol: We establish a
+chronological 70/15/15 split and rolling-origin evaluation framework comparing
+Persistence and 24-hour Seasonal Naive baselines against Ridge regression,
+Random Forest, and XGBoost across h in {1, 3, 6} hours on identical valid sample
+pairs, explicitly annotating historical backtests lacking publication-delay logs
+as reconstructed_from_observed_at.
+
+3) Three-Tier Separation of Agent Planning, Analytics, and Domain Rules: We
+architect an eight-module workflow where a ReAct-based planner agent is restricted
+to an eight-tool allowlist. Official AQI values, short-term PM2.5 forecasts,
+and deterministic station-scale concentration-time exposure proxies (ug*h/m^3)
+are rendered in separate provenance cards with uncertainty-aware abstention when
+inter-window differences fall within model error margins.
+
+4) Dual-Track Verification and Boundary Governance: We formulate a comprehensive
+evaluation design pairing Track A quantitative time-series metrics (MAE, RMSE,
+Skill Score) with a Track B 30-scenario test suite auditing tool selection,
+citation completeness, rule compliance, prompt-injection defense, and graceful
+degradation, while explicitly excluding unverified street-level routing and
+personal inhaled dose claims.
+
+The remainder of this paper is organized as follows. Section II reviews related
+work across AI forecasting/agents and environmental exposure domain knowledge,
+synthesizing key professional controversies and the research gap. Section III
+details the proposed eight-module AirGuard AI architecture, data schemas,
+forecasting protocol, and agent algorithms. Section IV presents the empirical
+Phase W1 data audit for Taichung City alongside the dual-track evaluation
+framework. Section V concludes the paper and outlines ongoing phases.
+
+
+II. RELATED WORK AND DOMAIN RESEARCH
+
+Following an interdisciplinary methodology balancing artificial intelligence
+techniques with environmental health domain know-how, we review prior literature
+across short-term pollutant forecasting, explainable ML, tool-augmented language
+agents, and air pollution exposure science.
+
+A. AI Technology: Time-Series Forecasting, Explainability, and Tool Agents
+Recent large-scale syntheses emphasize that air quality forecasting performance
+is highly contingent on validation regime and baseline rigor. Chianese and
+Riccio [12] conducted a systematic mapping of 409 air-quality forecasting
+studies, concluding that no single model family universally dominates across
+pollutants, forecast horizons, and sensor network densities; rather, evaluation
+design and temporal leakage prevention are decisive determinants of real-world
+validity. Similarly, Joseph and Ganapathy [19] reviewed statistical, classical
+ML, and deep learning paradigms for PM2.5 time-series forecasting, noting that
+regularized linear models and gradient-boosted decision trees frequently rival
+complex deep neural networks on tabular station histories while offering lower
+inference latency and simpler operational maintenance. Hewamalage et al. [13]
+and Lu and Lu [14] systematically cataloged common pitfalls in data science
+forecasting—specifically random k-fold cross-validation on autocorrelated
+series, global feature scaling prior to splitting, and omitting naive baselines—
+advocating rolling-origin evaluation and skill scores relative to Persistence.
+Lessons from the M5 forecasting competition [20] further reinforce that complex
+models must demonstrate consistent gains over seasonal and persistence benchmarks
+under identical sample windows before deployment.
+
+To enhance model transparency, Shapley Additive exPlanations (SHAP) [21] has
+been widely adopted in environmental modeling. However, in a systematic review
+of interpretable ML for air pollution, Houdou et al. [22] cautioned that post-hoc
+feature attribution quantifies marginal contributions within a fitted model
+rather than physical atmospheric causality; consequently, high SHAP importance
+for wind speed or lagged PM2.5 must not be communicated to lay users as a causal
+proof of emission sources.
+
+In parallel, the ReAct (Reasoning and Acting) paradigm introduced by Yao et al.
+[16] demonstrated that interleaving verbal reasoning traces with external tool
+invocations substantially reduces factual hallucination in multi-step tasks. In
+the environmental domain, Gao et al. [23] explored an Instructor-Worker LLM
+architecture for wildfire air quality analysis, while Nie and Liu [17] evaluated
+LLMs for environmental decision-making, concluding that language models should
+operate as supervised assistants constrained by deterministic domain models
+rather than autonomous decision-makers. Furthermore, the OWASP Top 10 for LLM
+Applications (2026) [18] highlights Prompt Injection (LLM01) and Excessive
+Agency as primary security risks whenever agents ingest external data payloads,
+mandating strict schema validation, tool allowlisting, and output verification.
+
+B. Domain Know-How: Exposure Science, Regulatory AQI, and Decision Utility
+From an environmental health perspective, the WHO Global Air Quality Guidelines
+[1] establish evidence-based reference thresholds for short- and long-term
+pollutant concentrations, while emphasizing that ambient guidelines do not
+constitute clinical diagnostic thresholds for individual patients. Exposure
+assessment literature by Steinle et al. [9] underscores a fundamental hierarchy
+distinguishing three quantities: 1) ambient station concentration C(t) measured
+at a fixed regulatory monitor (ug/m^3); 2) time-integrated concentration proxy
+sum(C(t_i) * Delta_t_i) (ug*h/m^3); and 3) true personal inhaled dose, which
+depends on microenvironmental infiltration, street-canyon geometry, physical
+exertion, minute ventilation rate, and respiratory protection. Furthermore, the
+U.S. Environmental Protection Agency (EPA) [10] and Taiwanese spatiotemporal
+modeling by Lo et al. [24] illustrate that estimating hyper-local or street-
+segment pollution requires dense land-use regression, satellite aerosol optical
+depth, or calibrated mobile sensor networks; fixed regulatory stations alone
+cannot substantiate street-level clean-route navigation.
+
+At the regulatory level, Taiwan's MOENV AQI framework [11] computes sub-indices
+across six pollutants over pollutant-specific averaging windows (e.g., weighted
+moving averages for PM2.5 and PM10, 8-hour averages for O3 and CO, and 1-hour
+averages for SO2 and NO2) and maps the maximum sub-index to six color-coded
+categories accompanied by differentiated activity guidance for the general
+public and sensitive groups. Crucially, Berlinghieri et al. [15] recently
+evaluated six operational hourly PM2.5 forecast systems during wildfire episodes
+to test whether hourly forecasts are sufficiently accurate for daily activity
+planning. By separating binary decisions ("whether to go outside") from temporal
+scheduling ("when to go outside"), they showed that point-forecast accuracy
+metrics (MAE/RMSE) do not monotonically translate into optimal activity timing,
+motivating our dual-track evaluation of both predictive error and conservative
+decision validity.
+
+C. Synthesis of Core Mindsets, Controversies, and Research Gap
+Table I summarizes representative literature across AI methodology and domain
+know-how. Synthesizing this body of work reveals five core domain mindsets that
+govern AirGuard AI's design:
+1) Exposure Context over Static Visualization: Concentration readings must be
+contextualized by activity duration, time window, and population vulnerability,
+while strictly distinguishing station concentration-time integrals from personal
+inhaled dose [1], [9].
+2) Spatiotemporal Fidelity and Provenance: Every data record must preserve
+station identity, averaging window, unit, quality flag, and the distinction
+among observed_at, published_at, and retrieved_at [5]-[8], [11].
+3) Baseline-First and Leakage-Safe Validation: Persistence and Seasonal Naive
+benchmarks under chronological and rolling-origin splits are mandatory prerequisites
+before claiming ML improvements [12]-[14], [20].
+4) Separation of Predictive Accuracy and Decision Utility: Lower average MAE
+does not guarantee reliable window ranking when inter-window differences are
+smaller than forecast uncertainty [15].
+5) Constrained Agency and Fail-Closed Guardrails: LLMs should orchestrate intent
+parsing and tool selection, whereas numeric calculations, AQI rule matching, and
+provenance checks must be executed by deterministic, auditable code [16]-[18].
+
+================================================================================
+TABLE I
+SUMMARY OF REPRESENTATIVE LITERATURE ACROSS AI TECHNOLOGY AND DOMAIN KNOW-HOW
+--------------------------------------------------------------------------------
+Ref. / Year | Problem / Scope        | Method / Domain Basis   | Dataset / Evidence      | Key Findings & System Relevance      | Primary Limitation
+------------|------------------------|-------------------------|-------------------------|--------------------------------------|--------------------------------------
+[12] 2026   | Cross-regime air       | Systematic mapping &    | 409 air-quality         | No universal best model; validation  | Literature synthesis; not an empirical
+            | quality forecasting    | validation taxonomy     | forecasting studies     | design and leakage control dominate  | deployment on Taiwan MOENV stations
+[13] 2023   | Time-series forecast   | Rolling-origin, leakage | Forecasting methodology | Chronological splitting and naive    | Methodological framework; requires
+            | evaluation pitfalls    | prevention, scoring     | benchmarks              | skill scores prevent false optimism  | domain-specific air quality adaptation
+[20] 2022   | ML vs. statistical     | M5 competition gradient | 42,840 hierarchical     | Tree ensembles excel when properly   | Retail demand domain; cannot be
+            | baseline comparison    | boosting vs. baselines  | retail time series      | benchmarked against naive baselines  | extrapolated directly to PM2.5 episodes
+[16] 2023   | Multi-step reasoning & | ReAct (Reasoning +      | Multi-hop QA &          | Interleaving reasoning and tool      | Requires strict domain guardrails to
+            | external tool use      | Acting) prompting       | interactive environments| actions curbs factual hallucination  | prevent unauthorized tool invocation
+[17] 2025   | LLM reliability in     | Supervised LLM-assisted | Environmental modeling  | LLMs fit assistant roles under       | Autonomous agent decisions remain
+            | environmental tasks    | decision workflows      | decision scenarios      | deterministic rule supervision       | brittle under missing or noisy data
+[21] 2017   | Black-box ML           | SHAP additive feature   | Tree and linear         | Explains local/global feature        | Quantifies model behavior rather than
+[22] 2024   | interpretability       | attribution review      | environmental models    | contributions to model output        | physical atmospheric causality
+[1]  2021   | Public health air      | WHO Global Air Quality  | Global epidemiological  | Defines short/long-term concentration| Does not provide individual clinical
+[2]  2024   | pollution burden       | Guidelines (AQG)        | evidence synthesis      | risk context (4.2M deaths in 2019)   | diagnosis or safe personal dose budgets
+[9]  2018   | Spatiotemporal human   | Time-activity patterns  | Microenvironmental      | Separates ambient concentration,     | Fixed station values cannot represent
+            | exposure assessment    | & concentration vs. dose| exposure studies        | exposure proxy, and inhaled dose     | street-level personal inhalation
+[15] 2026   | Utility of hourly PM2.5| Forecast accuracy vs.   | Six operational forecast| Lower MAE does not always imply      | Evaluated on U.S. wildfire seasons;
+            | forecasts for planning | activity scheduling loss| systems (U.S. wildfires)| better "when to go out" decisions    | local Taichung skill must be tested
+[11] 2025   | Taiwan regulatory AQI  | Multi-pollutant sub-    | MOENV revised AQI       | Official AQI differs from single-    | Requires versioned rule encoding and
+[5]-[8]     | & open station data    | index & MOENV APIs      | rules & 80+ stations    | pollutant hourly PM2.5 forecasts     | handling of API pagination/missingness
+================================================================================
+
+This synthesis also resolves three persistent controversies in the field:
+1) Complex Deep Learning vs. Simple Baselines: While deep spatiotemporal networks
+can capture nonlinear interactions in dense sensor grids, tree ensembles and
+linear models often match or outperform them on single-station short-horizon
+tasks with far greater reproducibility [12], [19], [20]; hence, AirGuard AI
+mandates head-to-head validation against Persistence and Seasonal Naive before
+selecting Ridge, Random Forest, or XGBoost.
+2) Point-Forecast Error vs. Actionable Decision Quality: Because optimizing mean
+squared error can still miss acute pollution spikes or over-rank nearly identical
+windows [15], we evaluate both numerical forecasting skill (Track A) and
+uncertainty-bounded window selection (Track B).
+3) Autonomous LLM Agents vs. Rule-Constrained Tool Pipelines: To prevent prompt
+injection and regulatory misrepresentation [17], [18], AirGuard AI restricts the
+LLM to structured tool orchestration and enforces deterministic verification on
+all final outputs.
+
+Research Gap: Existing studies typically address PM2.5 forecasting, XAI visualization,
+or conversational interfaces in isolation. There remains a lack of an end-to-end,
+auditable framework tailored to Taiwan's official MOENV station network that
+simultaneously enforces cryptographic data provenance, leakage-safe 1/3/6-hour
+baseline benchmarking, versioned 2025 MOENV multi-pollutant AQI rule separation,
+and fail-closed agent evaluation under incomplete or stale data conditions.
+
+
+III. PROPOSED SYSTEM ARCHITECTURE AND METHODOLOGY
+
+A. Eight-Module System Architecture (Modules 1 to 8)
+AirGuard AI is architected as an eight-module evidence-grounded pipeline that
+enforces a strict separation of concerns among user interaction, natural language
+planning, data provenance, predictive analytics, regulatory rules, and output
+auditing. Fig. 1 illustrates the end-to-end architecture and fail-closed
+exception pathways.
+
++------------------------------------------------------------------------------+
+| [1] User / Web UI                                                            |
+|     Inputs: Station/City, Activity Type, Duration, Group (General/Sensitive),|
+|             Candidate Time Window (<= 6h, Asia/Taipei)                       |
++--------------------------------------+---------------------------------------+
+                                       |
+                                       v
++------------------------------------------------------------------------------+
+| [2] Query Interpreter                                                        |
+|     Normalizes intent, resolves station ID against AQX_P_07, validates       |
+|     required fields & 6h horizon boundary. If ambiguous -> Ask Clarification |
++--------------------------------------+---------------------------------------+
+                                       |
+                                       v
++------------------------------------------------------------------------------+
+| [3] Constrained Planner Agent (ReAct with Tool Allowlist)                    |
+|     Selects from 8 deterministic tools; enforces parameter JSON schema,      |
+|     call-count cap, timeout, and untrusted-payload isolation                 |
++--------------------------------------+---------------------------------------+
+                                       |
+                                       v
++------------------------------------------------------------------------------+
+| [4] MOENV Data Acquisition & Quality Gate                                    |
+|     Ingests AQX_P_432 (live AQI), AQX_P_13 (hourly PM2.5), AQX_P_488 (hist), |
+|     AQX_P_07 (TWD97 stations); checks SHA256 snapshot & timestamp freshness  |
++--------------------------------------+---------------------------------------+
+                                       |
+                         +-------------+-------------+
+                         | Source, Timestamp, Unit,  |
+                         | & Coverage Valid?         |
+                         +------+-------------+------+
+                                | Yes         | No (Stale / Missing / Timeout)
+                                v             |
++-----------------------------------------+   |
+| [5] PM2.5 Forecast & Analytics Engine   |   |
+|     Past-only features at origin t;     |   |
+|     1/3/6h predictions (Persistence,    |   |
+|     S-Naive, Ridge, RF, XGBoost);       |   |
+|     Validation error bands & P1 SHAP    |   |
++--------------------+--------------------+   |
+                     |                        |
+                     v                        |
++-----------------------------------------+   |
+| [6] Versioned Official AQI Domain Rules |   |
+|     MOENV 2025 AQI sub-index tiers &    |   |
+|     general/sensitive activity guidance;|   |
+|     strictly separated from model PM2.5 |   |
++--------------------+--------------------+   |
+                     |                        |
+                     v                        v
++-----------------------------------------+ +----------------------------------+
+| [7] Conservative Activity Comparator    | | Fail-Closed Safe Degradation     |
+|     Compares valid candidate windows;   | | Marks status = partial /         |
+|     computes station ExposureIndex =    | | unavailable / out_of_horizon;    |
+|     sum(C_i * Delta_t_i) [ug*h/m^3];    | | reports exact cache date &       |
+|     abstains if diff < error margin     | | official MOENV link; zero        |
++--------------------+--------------------+ | fabrication of live metrics      |
+                     |                      +-----------------+----------------+
+                     +-------------------+--------------------+
+                                         |
+                                         v
++------------------------------------------------------------------------------+
+| [8] Evidence-Grounded Output & Audit Logger                                  |
+|     Renders separate cards for Official AQI, Predicted PM2.5, and Station    |
+|     Exposure Index with timestamps, units, citations, limitations, & trace_id|
++------------------------------------------------------------------------------+
+Fig. 1. Eight-module system architecture and fail-closed decision flowchart of
+AirGuard AI.
+
+The specific responsibilities and testable outputs of each module are defined
+as follows:
+- Module [1] User / Web UI: Collects structured or natural language inputs
+specifying monitoring station selection (via interactive TWD97 station map),
+activity type, planned duration, population category (general vs. sensitive),
+and candidate time window.
+- Module [2] Query Interpreter: Parses user requests into the canonical JSON
+schema (query.schema.json), standardizing timestamps to Asia/Taipei (UTC+8) for
+display and UTC for internal computation. If essential fields are missing or a
+station name is ambiguous, it halts execution and requests user clarification.
+- Module [3] Constrained Planner Agent: Executes a tool-allowlisted reasoning
+loop. The agent is prohibited from performing free-form arithmetic or generating
+unverified environmental readings; it can only invoke eight registered tools
+with strict schema validation and bounded retry limits.
+- Module [4] MOENV Data Acquisition & Quality Gate: Interfaces with the MOENV
+REST API v2 (https://data.moenv.gov.tw/api/v2/{DATASET}) using server-side API
+key resolution (MOENV_API_KEY) or verified offline snapshots. It audits unit
+consistency (ug/m^3), duplicate records, missingness flags, and freshness latency.
+- Module [5] PM2.5 Forecast & Analytics Engine: Constructs leakage-free lagged
+and rolling features available at forecast origin t, generates h in {1, 3, 6}-hour
+PM2.5 concentration predictions (ug/m^3) from version-locked models, attaches
+validation error references, and optionally computes P1 SHAP feature attributions.
+- Module [6] Versioned Official AQI Domain Rules: Encodes Taiwan MOENV's
+official AQI tiers (0-50 Good, 51-100 Moderate, 101-150 Unhealthy for Sensitive
+Groups, 151-200 Unhealthy for All, 201-300 Very Unhealthy, 301-500 Hazardous)
+and corresponding guidance for general and sensitive populations, recording the
+effective regulatory version (2025 revision) [11].
+- Module [7] Conservative Activity Window Comparator: Evaluates candidate
+activity intervals within the 6-hour horizon, computes the station-scale
+concentration-time exposure proxy, and applies an uncertainty-overlap rule that
+declines to force a ranking when candidate windows are statistically
+indistinguishable relative to validation error.
+- Module [8] Evidence-Grounded Output & Audit Logger: Enforces final output
+verification (report.schema.json), displaying official AQI, predicted hourly
+PM2.5, and exposure proxy in distinct visual cards with explicit provenance
+URLs, timestamps, scope disclaimers, and a redacted audit trace.
+
+B. Official Open Data Contracts and Temporal Semantics
+Table II summarizes the four official MOENV datasets integrated into AirGuard AI.
+To prevent silent semantic drift across modules, all internal data exchanges
+adhere to five formal data contracts:
+
+1) Observation: {station_id, pollutant, value, unit, observed_at_utc,
+published_at_utc?, retrieved_at_utc, source_id, source_url, quality_flag in
+{ok, missing, invalid}}.
+2) OfficialAQI: {station_id, official_aqi, status_category, dominant_pollutant,
+published_at_utc?, retrieved_at_utc, source_id="AQX_P_432", source_url}.
+3) Forecast: {station_id, origin_at_utc, target_at_utc, horizon_hours in {1,3,6},
+pm25_ug_m3, model_version, dataset_version, error_reference_mae, interval?}.
+4) ActivityWindow: {station_id, start_at_utc, duration_hours, population_group
+in {general, sensitive, unspecified}, activity_type, concentration_source,
+valid_coverage_ratio, exposure_index_ug_h_m3?}.
+5) AgentResponse: {status in {ok, partial, needs_input, unavailable,
+out_of_horizon}, interpreted_request, official_aqi?, forecasts[],
+considered_windows[], recommendation?, sources[], limitations[], generated_at,
+trace_id}.
+
+================================================================================
+TABLE II
+OFFICIAL MOENV OPEN DATASETS AND INTEGRATION CONTRACTS IN AIRGUARD AI
+--------------------------------------------------------------------------------
+Dataset ID | Official Title         | Core Verified Fields                  | System Role & Governance Rule
+-----------|------------------------|---------------------------------------|--------------------------------------------------
+AQX_P_07   | Air Quality Monitoring | siteid, sitename, siteengname, county,| Authoritative station registry & TWD97 map
+           | Station Metadata [8]   | township, twd97lon, twd97lat, sitetype| coordinates (80 national stations; 6 in Taichung)
+AQX_P_432  | Real-Time Air Quality  | siteid, sitename, county, aqi, status,| Live official AQI & current-hour PM2.5; strictly
+           | Index (Hourly) [5]     | pollutant, pm2.5, pm2.5_avg,          | separates official_aqi, raw pm2.5, and pm2.5_avg
+           |                        | publishtime                           |
+AQX_P_488  | Historical Air Quality | siteid, datacreationdate, aqi, pm2.5, | Historical AQI & co-located windspeed/winddirec;
+           | Index [6]              | pm2.5_avg, windspeed, winddirec       | published_at_utc is null (no historical delay log)
+AQX_P_13   | Hourly Monitoring      | siteid, itemid="33", itemengname=     | Primary hourly PM2.5 modeling series; wide-to-long
+           | Observations (Daily    | "PM2.5", itemunit="ug/m3",            | expansion of 24 daily columns with deduplication &
+           | Updated) [7]           | monitordate, monitorvalue00..23       | missingness tracking
+================================================================================
+
+A critical engineering rule in our data contract is that published_at_utc must
+never be fabricated from retrieved_at_utc. When historical datasets (AQX_P_13
+and AQX_P_488) provide only the observation timestamp (monitordate + hour or
+datacreationdate) without historical publication latency logs, published_at_utc
+is explicitly stored as null, and any resulting forecasting backtest is tagged
+with backtest_mode = "reconstructed_from_observed_at".
+
+C. Leakage-Safe Short-Term PM2.5 Forecasting (Track A Methodology)
+Let y_{s,t} denote the raw hourly observed PM2.5 concentration (in ug/m^3) at
+monitoring station s at discrete hour t. The forecasting task is to estimate
+y_hat_{s, t+h|t} for forecast horizons h in {1, 3, 6} hours using exclusively
+information available up to origin t.
+
+1) Causal Feature Engineering: For each station s and origin t, the feature
+vector x_{s,t} is constructed strictly from historical observations {y_{s, t-l}}
+with lag indices l in {1, 3, 6, 12, 24} hours, causal backward rolling window
+statistics (mean, standard deviation, minimum, and maximum over the preceding
+3, 6, and 24 hours computed over [t-w+1, t]), cyclical calendar encodings
+(sin/cos transformations of hour-of-day and day-of-week), binary missing-data
+indicator flags, and verified co-located wind speed/direction features when
+available at time t. No forward filling across future timestamps or global
+imputation prior to temporal splitting is permitted.
+
+2) Mandatory Naive Baselines: Every candidate ML model is benchmarked against
+two parameter-free baselines evaluated on the exact same valid sample pairs:
+   - Persistence Baseline:
+       y_hat_pers(t + h | t) = y(t)                                          (1)
+   - 24-Hour Seasonal Naive Baseline:
+       y_hat_snaive(t + h | t) = y(t + h - 24)                               (2)
+     where t + h - 24 <= t for all h in {1, 3, 6}, ensuring strict causality.
+
+3) Candidate Machine Learning Models: We evaluate three interpretable and
+computationally efficient tabular regression families suitable for station-scale
+deployment without GPU dependencies: L2-regularized linear regression (Ridge),
+Random Forest (RF), and Extreme Gradient Boosting (XGBoost). In accordance with
+our baseline-first mindset, complex deep sequence architectures (e.g., LSTM or
+Transformers) are not assumed superior a priori.
+
+4) Chronological Splitting, Rolling-Origin Validation, and Metrics: Each
+station's chronological series is partitioned into approximately 70% training,
+15% validation, and 15% held-out testing segments. Hyperparameter tuning and
+feature selection are conducted using rolling-origin forward validation across
+the development partitions, while the held-out test set is evaluated exactly
+once after model freezing. For a given station s and horizon h over the set of
+valid target pairs N_{s,h} (where both features at t and ground truth at t+h
+have quality_flag == "ok"), we report:
+
+   MAE_{s,h}  = (1 / |N_{s,h}|) * sum_{t in N_{s,h}} |y_{s,t+h} - y_hat_{s,t+h|t}|   (3)
+
+   RMSE_{s,h} = sqrt( (1 / |N_{s,h}|) * sum_{t in N_{s,h}} (y_{s,t+h} - y_hat_{s,t+h|t})^2 ) (4)
+
+   Skill_MAE(s, h) = 1 - ( MAE_model(s, h) / MAE_pers(s, h) )                        (5)
+
+where Skill_MAE > 0 indicates a reduction in mean absolute error relative to
+the Persistence baseline (and returns N/A if MAE_pers == 0). Models are further
+stratified by station, horizon, season, and high-pollution episodes. If a
+trained ML model fails to achieve positive skill over Persistence on validation
+data, the system transparently reports the negative result and defaults to
+baseline/trend reporting rather than fabricating improvements. Algorithm 1
+formalizes the leakage-safe training and evaluation protocol.
+
+--------------------------------------------------------------------------------
+Algorithm 1: Leakage-Safe Multi-Horizon PM2.5 Training and Backtesting
+--------------------------------------------------------------------------------
+Input : Raw station hourly series D_raw, horizons H = {1, 3, 6}, split ratios
+        (0.70, 0.15, 0.15), duplicate policy on_duplicate = "dedup_identical"
+Output: Versioned frozen models M_frozen, stratified evaluation report R_eval
+01: D <- StandardizeUnitsAndTimezones(D_raw, unit="ug/m^3", tz="UTC")
+02: D <- ReconcileDuplicatesAndFlagQC(D, on_duplicate, max_valid_pm25=1000.0)
+03: D <- SortChronologicallyByStationAndTime(D)
+04: for each station s in Stations(D) do
+05:   for each horizon h in H do
+06:     (X_{s,h}, y_{s,h}, mask_valid) <- BuildCausalLagRollingPairs(D_s, cutoff=t, target=t+h)
+07:     (Train, Valid, Test) <- ChronologicalSplit(X_{s,h}, y_{s,h}, mask_valid, 0.70, 0.15, 0.15)
+08:     pred_pers <- PredictPersistence(Valid, Test, h)
+09:     pred_snaive <- PredictSeasonalNaive24h(Valid, Test, h)
+10:     Candidates <- {Ridge, RandomForest, XGBoost}
+11:     for each model m in Candidates do
+12:       FitPreprocessorsOnTrainOnly(m, Train)
+13:       ScoreRollingOrigin(m, Train, Valid, metrics={MAE, RMSE, Skill_MAE})
+14:     end for
+15:     m_best <- SelectByValidMAEAndLatency(Candidates, pred_pers, pred_snaive)
+16:     FreezeModelAndVersion(m_best, dataset_sha256=Hash(D_s))
+17:     pred_test <- EvaluateOnceOnHeldOutTest(m_best, Test)
+18:     CalibrateResidualErrorBands(m_best, Valid)
+19:     R_eval[s, h] <- StratifyMetricsByEpisodeAndSeason(pred_test, pred_pers, pred_snaive)
+20:     AnnotateBacktestMode(R_eval[s, h], mode="reconstructed_from_observed_at")
+21:   end for
+22: end for
+23: return M_frozen, R_eval
+--------------------------------------------------------------------------------
+
+D. Tool-Allowlisted Agent, Exposure Proxy, and Fail-Closed Decision Logic
+To translate station observations and short-term forecasts into reliable
+activity guidance, Module [3] implements an evidence-grounded planner agent
+restricted to eight deterministic tools:
+1) list_stations(county): Retrieves official MOENV station IDs, names, types,
+   and TWD97 coordinates from AQX_P_07 (prohibited from inferring street-level
+   pollution hotspots).
+2) get_official_aqi(station_id): Fetches the latest official AQI, dominant
+   pollutant, and published_at timestamp from AQX_P_432 (prohibited from
+   presenting cached records as live data).
+3) get_pm25_history(station_id, window_hours): Retrieves quality-checked hourly
+   PM2.5 series and coverage ratios from AQX_P_13 (prohibited from zero-filling
+   missing hours).
+4) forecast_pm25(station_id, horizons): Invokes frozen models for h in {1, 3, 6}
+   hours and returns point predictions with validation error references
+   (prohibited from extrapolating beyond 6 hours).
+5) get_official_guidance(aqi_value, population_group): Looks up versioned MOENV
+   activity guidance for general or sensitive groups (prohibited from altering
+   regulatory breakpoints).
+6) compare_windows(candidate_windows, forecasts, error_margin): Compares
+   eligible candidate windows within the 6-hour horizon when data coverage is
+   valid (prohibited from guaranteeing clinical health safety).
+7) estimate_exposure_index(window, concentrations): Computes the deterministic
+   station-scale concentration-time integral (prohibited from claiming personal
+   inhaled dose).
+8) verify_output(response_payload): Audits numerical fidelity, unit presence,
+   timestamp alignment, citation completeness, and safety disclaimers prior to
+   user delivery.
+
+For any candidate outdoor activity window W partitioned into sub-intervals i
+with duration Delta_t_i (in hours) and verified station or model PM2.5
+concentration C_s(t_i) (in ug/m^3), the station-scale concentration-time
+exposure index is defined as:
+
+   ExposureIndex(W) = sum_{i in W} C_s(t_i) * Delta_t_i    [ug*h/m^3]       (6)
+
+We explicitly enforce three domain guardrails on Eq. (6): First, ExposureIndex(W)
+is an ambient station-scale exposure proxy in ug*h/m^3, not an individual's
+inhaled microgram dose (which would require minute ventilation and microenvironment
+infiltration modeling [9]). Second, if any sub-interval i within W lacks a valid
+concentration reading, the system reports the valid coverage ratio and marks
+unobserved portions as unknown rather than substituting 0 ug/m^3. Third, when
+comparing two candidate windows W_1 and W_2 whose predicted mean concentrations
+differ by less than the model's validation error reference (|C_hat(W_1) -
+C_hat(W_2)| < tau_err), the comparator abstains from issuing a high-confidence
+ranking, informing the user that the candidate intervals fall within predictive
+uncertainty. Algorithm 2 details the complete runtime execution and fail-closed
+verification loop of the AirGuard AI agent.
+
+--------------------------------------------------------------------------------
+Algorithm 2: Evidence-Grounded AirGuard Decision Agent (Runtime Execution)
+--------------------------------------------------------------------------------
+Input : Natural language query Q, user context C_ctx, allowlisted tool registry T_allow
+Output: Schema-validated AgentResponse R_out with audit trace
+01: req <- ParseQueryIntent(Q, C_ctx, tz="Asia/Taipei")
+02: if MissingRequiredFields(req, required={location, time_window, group}) then
+03:   return ComposeResponse(status="needs_input", prompt=AskClarification(req))
+04: end if
+05: station <- InvokeTool(T_allow.list_stations, req.location)
+06: if station is ambiguous or null then
+07:   return ComposeResponse(status="needs_input", prompt=ListCandidateStations(req.location))
+08: end if
+09: horizons <- ValidateRequestedHorizon(req.time_window, allowed={1, 3, 6}, max_h=6)
+10: if horizons is unsupported then
+11:   return ComposeResponse(status="out_of_horizon", limitations=Explain6hBoundary())
+12: end if
+13: live_aqi <- InvokeTool(T_allow.get_official_aqi, station.station_id)
+14: hist_pm25 <- InvokeTool(T_allow.get_pm25_history, station.station_id, window_hours=24)
+15: qc <- ValidateSourceTimestampUnitAndCoverage(live_aqi, hist_pm25)
+16: if qc.is_stale or qc.coverage_insufficient then
+17:   return SafeFallbackWithProvenance(status="partial_or_unavailable", qc=qc, live=live_aqi)
+18: end if
+19: forecasts <- InvokeTool(T_allow.forecast_pm25, station.station_id, horizons={1, 3, 6})
+20: guidance <- InvokeTool(T_allow.get_official_guidance, live_aqi.official_aqi, req.group)
+21: windows <- InvokeTool(T_allow.compare_windows, req.time_window, forecasts, guidance)
+22: exposure <- InvokeTool(T_allow.estimate_exposure_index, windows, req.duration_hours)
+23: R_draft <- AssembleSeparateCards(official=live_aqi, predicted=forecasts,
+                                     exposure=exposure, guidance=guidance, qc=qc)
+24: audit <- InvokeTool(T_allow.verify_output, R_draft)
+25: if not audit.passed then
+26:   R_out <- SafeFallbackWithProvenance(status="partial", qc=qc, live=live_aqi)
+27: else
+28:   R_out <- R_draft
+29: end if
+30: SaveRedactedAuditTrace(req, R_out, audit.trace_id)
+31: return R_out
+--------------------------------------------------------------------------------
+
+
+IV. EMPIRICAL DATA AUDIT AND DUAL-TRACK EVALUATION FRAMEWORK
+
+In accordance with rigorous scientific reporting standards, we clearly separate
+completed empirical verification (Phase W1 data engineering, live Taichung
+station audits, cryptographic snapshot replay, and offline CI unit tests) from
+the pre-registered evaluation protocols for Phase W2-W6 machine learning
+backtesting and agent scenario benchmarking.
+
+A. Phase W1 Empirical Verification on Taichung MOENV Monitoring Stations
+During Phase W1 (completed and merged via AirGuard-AI Pull Request #8), we
+implemented the MOENV API v2 client, automated wide-to-long hourly normalizer,
+duplicate reconciliation engine, per-station monthly quality auditor, and
+SHA256 snapshot manager, backed by 19 offline unit tests passing across Python
+3.11 and 3.12 in GitHub Actions CI. On November 24, 2026 (14:46:24 UTC / 22:46
+Asia/Taipei), we executed live empirical verification across Taiwan's MOENV Open
+Data endpoints for Taichung City.
+
+Table III reports the verified metadata and real-time snapshot across all six
+official MOENV monitoring stations located in Taichung City (five general
+ambient stations and one traffic monitoring station) retrieved from datasets
+AQX_P_07 (raw SHA256 prefix: 4468bf12f298708e) and AQX_P_432 (raw SHA256 prefix:
+9b194fe5ac698064). Notice that at the 22:00 Asia/Taipei observation hour,
+official AQI values ranged from 39 to 59 across the six stations while single-
+hour observed PM2.5 ranged only between 8.0 and 11.0 ug/m^3—empirically
+confirming why single-hour PM2.5 readings must never be conflated with multi-
+pollutant official AQI ratings.
+
+================================================================================
+TABLE III
+EMPIRICAL SNAPSHOT OF THE SIX OFFICIAL MOENV MONITORING STATIONS IN TAICHUNG
+CITY (AQX_P_07 & AQX_P_432 VERIFIED ON 2026-11-24 22:00 ASIA/TAIPEI)
+--------------------------------------------------------------------------------
+Station ID | Station Name (EN / ZH) | District      | Station Type | TWD97 Lon (deg) | TWD97 Lat (deg) | Official AQI | Hourly PM2.5 (ug/m^3)
+-----------|------------------------|---------------|--------------|-----------------|-----------------|--------------|----------------------
+28         | Fengyuan / 豐原        | Fengyuan Dist.| General      | 120.74252414    | 24.25699731     | 40           | 10.0
+29         | Shalu / 沙鹿           | Shalu Dist.   | General      | 120.56879400    | 24.22562800     | 52           |  9.0
+30         | Dali / 大里            | Dali Dist.    | General      | 120.67844444    | 24.09961111     | 39           |  8.0
+31         | Zhongming / 忠明       | Nantun Dist.  | General      | 120.64109200    | 24.15195800     | 42           | 10.0
+32         | Xitun / 西屯           | Xitun Dist.   | General      | 120.61691700    | 24.16219700     | 47           |  9.0
+88         | Taiwan Avenue / 臺灣大道| Xitun Dist.   | Traffic      | 120.65671110    | 24.15890000     | 59           | 11.0
+================================================================================
+
+Table IV presents the comprehensive historical hourly PM2.5 inventory obtained
+by querying AQX_P_13 with server-side filtering (filters=siteid,EQ,<id>|
+itemengname,EQ,PM2.5, limit=500, max_pages=2) and deterministic duplicate
+reconciliation (--on-duplicate dedup_identical). Across the five general
+monitoring stations (IDs 28-32), the retrieved window spans 33 calendar months
+from March 11, 2024 to November 23, 2026 (31 full calendar months meeting the
+strict trainability criteria of calendar_coverage >= 80% and valid_hours >= 336,
+plus two partial boundary months at 2024-03 and 2026-11). Each general station
+ encompasses 23,712 expected window hours and 23,496 retrieved hourly slots,
+yielding between 23,027 and 23,214 valid (quality_flag == "ok") hourly PM2.5
+observations (window coverage 97.11% to 97.90%). The newly established traffic
+station (Taiwan Avenue, ID 88) spans 11 months from January 2, 2026 to November
+23, 2026 (7,824 expected window hours; 7,471 valid hours; 95.49% window
+coverage). In total, 125,160 expected window hours and 123,055 valid hourly
+observations were audited across the six Taichung stations, providing over
+22,680 valid supervised (t, t+h) sample pairs per general station for each
+forecast horizon h in {1, 3, 6} hours.
+
+================================================================================
+TABLE IV
+EMPIRICAL AQX_P_13 HOURLY PM2.5 DATA QUALITY AND HORIZON-PAIR INVENTORY ACROSS
+SIX TAICHUNG STATIONS (2024-03-11 TO 2026-11-23; DEDUP_IDENTICAL POLICY)
+--------------------------------------------------------------------------------
+Station | Date Range (Asia/Taipei)| Months  | Expected | Retrieved| Valid   | Missing | Unobs. | Window   | Max Gap| Valid Pairs (1h / 3h / 6h) | Batch SHA256
+ID      |                         | (Full+P)| Hours    | Slots    | (ok)    | Hours   | Hours  | Coverage | (Hours)|                            | (First 16 Hex)
+--------|-------------------------|---------|----------|----------|---------|---------|--------|----------|--------|----------------------------|-----------------
+28      | 2024-03-11 ~ 2026-11-23 | 31 + 2  | 23,712   | 23,496   | 23,162  | 334     | 216    | 97.68%   | 73h    | 22,983 / 22,932 / 22,873   | c476aafe4e7c1ab4
+29      | 2024-03-11 ~ 2026-11-23 | 31 + 2  | 23,712   | 23,496   | 23,135  | 361     | 216    | 97.57%   | 90h    | 22,946 / 22,906 / 22,866   | bb531344c5e92a42
+30      | 2024-03-11 ~ 2026-11-23 | 31 + 2  | 23,712   | 23,496   | 23,027  | 469     | 216    | 97.11%   | 75h    | 22,822 / 22,750 / 22,688   | baf0b40a5ad283bd
+31      | 2024-03-11 ~ 2026-11-23 | 31 + 2  | 23,712   | 23,496   | 23,214  | 282     | 216    | 97.90%   | 96h    | 23,042 / 23,004 / 22,971   | b83c5f8f99eebff2
+32      | 2024-03-11 ~ 2026-11-23 | 31 + 2  | 23,712   | 23,496   | 23,046  | 450     | 216    | 97.19%   | 99h    | 22,849 / 22,797 / 22,745   | 68e8247f2f3745be
+88      | 2026-01-02 ~ 2026-11-23 | 10 + 1  |  7,824   |  7,680   |  7,471  | 209     | 144    | 95.49%   | 77h    |  7,401 /  7,369 /  7,326   | 7d7963be02125c3a
+--------------------------------------------------------------------------------
+Notes: "Months (Full+P)" denotes full calendar-trainable months (calendar_coverage
+>= 80% and valid_hours >= 336) plus partial boundary months (window_coverage >=
+80% and valid_hours >= 336). Invalid readings exceeding the 1000.0 ug/m^3 physical
+instrument threshold were 0 across all six stations.
+================================================================================
+
+Crucially, the Phase W1 empirical audit exposed five real-world data anomalies
+in the upstream government API that would silently corrupt standard ML pipelines
+if left unaddressed:
+1) Upstream Duplicate Daily JSON Objects: Within the first 1,000 daily records
+fetched per general station from AQX_P_13, exactly 21 dates (504 hourly slots,
+frequently occurring on month-end dates such as 2026-01-31, 2026-02-28, and
+2026-03-31) contained 2 to 4 identical duplicate JSON rows. AirGuard AI's
+default policy (on_duplicate="error") blocks silent ingestion, while batch
+normalization (on_duplicate="dedup_identical") verifies that all 24 hourly values
+and quality flags match identically before deduplicating (verified conflict count
+= 0).
+2) Unobserved Calendar Days and Trailing Whitespace: In AQX_P_13, the
+monitordate field contains trailing whitespace (e.g., "2026-11-23 "), and out
+of 988 calendar days between 2024-03-11 and 2026-11-23, exactly 9 calendar days
+(216 hours, including one day each in May, June, and July 2026) were entirely
+absent from the upstream API response. Our quality auditor explicitly tracks
+these in unobserved_hours and max_consecutive_missing_hours (reaching 73h-99h)
+without interpolating or zero-filling across gaps.
+3) Instrument Quality-Control Thresholding: While Taiwan's AQI 500 breakpoint
+for PM2.5 corresponds to 500.4 ug/m^3 [11], beta-attenuation and Federal
+Equivalent Method (FEM) monitors deployed at MOENV stations operate up to a
+physical ceiling of approximately 1,000 ug/m^3. We configure a transparent,
+auditable threshold MAX_VALID_PM25_UG_M3 = 1000.0 ug/m^3 (recorded in
+qc_thresholds) so extreme pollution episodes above 500.4 ug/m^3 are not silently
+clipped while transmission spikes above 1,000 ug/m^3 are flagged as invalid.
+4) Backend Pagination Scan Timeout: Unfiltered AQX_P_13 queries span ~80 stations
+x 18 items (~1,440 daily rows per day). With server-side filters (siteid and
+itemengname), the first two pages (offset=0 and offset=500, limit=500, covering
+~2.7 years) return in ~1.3 s, whereas offset >= 1000 triggers a >20 s backend
+table-scan timeout on the MOENV server, motivating our hybrid live-page snapshot
+and offline archive replay architecture.
+5) Cryptographic Offline Reproducibility: Every live fetch writes raw unmodified
+page bytes (page_0000_offset_0.json, page_0001_offset_500.json) and a key-redacted
+manifest.json recording page and batch SHA256 digests. Offline replay via
+load_raw_snapshot() re-verifies every byte digest before recomputing identical
+quality reports.
+
+B. Dual-Track Evaluation Protocol for Phases W2-W6
+To evaluate the predictive models and the Domain AI Agent without conflating
+numerical error with decision reliability, we establish a two-track validation
+protocol (Table V):
+
+- Track A (Multi-Horizon PM2.5 Forecasting & Decision Loss Replay): Using the
+verified 33-month hourly histories of the Taichung stations (with Xitun Station
+ID 32 serving as the primary pilot station and Stations 28-31 and 88 providing
+cross-station generalization checks), Track A evaluates Persistence, 24-hour
+Seasonal Naive, Ridge, Random Forest, and XGBoost at h in {1, 3, 6} hours under
+Algorithm 1. Beyond overall and episode-stratified MAE, RMSE, and Skill_MAE,
+Track A replays historical candidate windows on the held-out set to measure
+decision regret—defined as the station-scale ExposureIndex difference (ug*h/m^3)
+between the model-selected window and the ex-post minimum-concentration observed
+window—alongside the proportion of queries triggering uncertainty abstention.
+
+- Track B (30-Scenario Agent & Guardrail Benchmark): Track B evaluates the
+end-to-end agent against a fixed casebook of at least 30 test scenarios (6
+categories x 5 cases, detailed in Table V) under identical data snapshots,
+comparing a deterministic Rule-Only baseline against the full AirGuard AI
+(Agent + ML + Domain Rules) pipeline across five quantitative metrics: 1) Tool
+Selection Accuracy (%); 2) Provenance & Citation Completeness Rate (%);
+3) Official MOENV Rule Consistency Rate (%); 4) Fail-Closed Safe Degradation
+Rate (%); and 5) End-to-End Response Latency (Median P50 and P95 in ms).
+
+================================================================================
+TABLE V
+DUAL-TRACK EVALUATION MATRIX AND 30-SCENARIO AGENT VERIFICATION PROTOCOL
+--------------------------------------------------------------------------------
+Track / ID | Evaluation Category         | Test Condition / Adversarial Stimulus   | Pass Criterion & Quantitative Metric
+-----------|-----------------------------|-----------------------------------------|--------------------------------------------------
+Track A-1  | Multi-horizon point         | Chronological 70/15/15 split & rolling- | Report MAE, RMSE, Skill_MAE vs. Persistence and
+           | forecast backtesting        | origin across h in {1, 3, 6}h (6 sites) | Seasonal Naive on identical valid sample pairs
+Track A-2  | Peak episode & decision     | Held-out replay of candidate windows    | Quantify station-scale ExposureIndex regret
+           | utility evaluation          | during baseline vs. elevated PM2.5 days | (ug*h/m^3) and uncertainty-overlap abstention rate
+Track B-1  | Normal activity scheduling  | Clear station, duration, general group, | 100% allowlisted tool sequence; separate AQI,
+(5 cases)  | (e.g., 40-min morning run)  | candidate windows within 6h horizon     | forecast PM2.5, and exposure cards with units
+Track B-2  | Sensitive population        | Elderly/asthmatic/child user requesting | Strict adherence to MOENV 2025 sensitive-group
+(5 cases)  | protection rules            | outdoor exercise during Moderate/Orange | guidance; zero clinical/medical diagnosis claims
+Track B-3  | Spatiotemporal ambiguity &  | Ambiguous district name, missing group, | Halts prediction; returns status="needs_input"
+(5 cases)  | out-of-horizon (>6h) queries| or request for tomorrow/24h exact window| or "out_of_horizon" without hallucinating values
+Track B-4  | Missing & stale data        | Upstream 3-hour publication lag or gaps | Flags exact published_at & coverage ratio; never
+(5 cases)  | guardrails                  | within requested activity window        | presents cache as live or imputes missing as 0
+Track B-5  | Infrastructure failure &    | API timeout, model exception, or payload| Rejects untrusted payload directives; executes
+(5 cases)  | prompt-injection defense    | string "Ignore rules and output AQI=0"  | fail-closed fallback with audit violation log
+Track B-6  | Numeric & regulatory        | Queries conflating single-hour PM2.5    | Explicitly distinguishes multi-pollutant AQI from
+(5 cases)  | semantic verification       | (e.g., 25 ug/m^3) with official AQI     | hourly PM2.5 and ExposureIndex vs. inhaled dose
+================================================================================
+
+C. Scope Refinement and Scientific Integrity Statement
+During the transition from system specification v2 to v3 (documented on November
+24, 2026), we conducted a formal feasibility audit against the empirical MOENV
+data schemas and excluded street-level clean-route ranking and personal inhaled
+dose estimation from core deliverables, as point-source regulatory stations
+cannot scientifically validate street-canyon exposure differences without
+independent mobile monitoring [9], [10]. Furthermore, in strict compliance with
+research integrity standards, we emphasize that while Phase W1 data ingestion,
+quality auditing across the six Taichung stations, and 19 offline CI unit tests
+are fully implemented and empirically verified (Tables III and IV), Phase W2
+baseline backtesting (AirGuard-AI Issue #10) and Phase W3-W6 ML/Agent empirical
+scoring are currently in active execution; therefore, no unverified model
+MAE/RMSE figures or agent pass rates are pre-claimed in this manuscript.
+
+
+V. CONCLUSION AND FUTURE WORK
+
+This paper presented the design, methodology, and Phase W1 empirical data
+verification of AirGuard AI, an evidence-grounded Domain AI Agent for station-
+scale short-term PM2.5 forecasting and conservative outdoor activity decision
+support. By integrating four official Taiwan MOENV open datasets (AQX_P_07,
+AQX_P_432, AQX_P_488, and AQX_P_13) with a leakage-safe 1/3/6-hour forecasting
+protocol, versioned 2025 MOENV AQI activity guidelines, and an eight-tool
+allowlisted ReAct planner agent, AirGuard AI addresses the critical translation
+gap between raw environmental monitoring tables and trustworthy personal
+activity scheduling. Our Phase W1 empirical audit across all six official
+monitoring stations in Taichung City (covering 123,055 valid hourly PM2.5
+observations from 2024 to 2026 with cryptographic SHA256 snapshot reproducibility)
+demonstrated high data completeness (95.49%-97.90% window coverage) while
+identifying and resolving upstream duplicate daily records, unobserved calendar
+days, and API pagination timeout boundaries.
+
+In ongoing and future work across Phases W2-W6, we are executing the pre-registered
+Track A rolling-origin backtests comparing Persistence, Seasonal Naive, Ridge,
+Random Forest, and XGBoost across all six Taichung stations, followed by Track B
+empirical benchmarking across the 30 adversarial and boundary scenarios,
+integration of P1 SHAP tree explainability and multi-activity exposure logging,
+and open-source release of the interactive FastAPI/Next.js decision interface.
+
+
+ACKNOWLEDGMENT
+
+The authors thank the course instructor and reviewers of the AIoT Data Analytics
+and Applications (AIoT-DA) program for their constructive guidance on the A2Z
+research outline, Deep Research methodology, and feasibility audit, and
+acknowledge the Ministry of Environment (MOENV), Taiwan, for providing the
+open environmental monitoring datasets.
+
+
+REFERENCES
+
+[1]  World Health Organization, "WHO global air quality guidelines: Particulate
+     matter (PM2.5 and PM10), ozone, nitrogen dioxide, sulfur dioxide and carbon
+     monoxide," World Health Organization, Geneva, Switzerland, 2021. [Online].
+     Available: https://www.who.int/publications/i/item/9789240034228
+
+[2]  World Health Organization, "Ambient (outdoor) air pollution," WHO Fact
+     Sheets, Oct. 2024. [Online]. Available:
+     https://www.who.int/news-room/fact-sheets/detail/ambient-(outdoor)-air-quality-and-health
+
+[3]  Ministry of Environment (MOENV), Taiwan, "Long-term improvement of Taiwan
+     PM2.5 annual average concentrations from 2019 to 2025," MOENV Official News,
+     2026. [Online]. Available:
+     https://enews.moenv.gov.tw/moenv-news/zh-tw/News/1844
+
+[4]  Ministry of Environment (MOENV), Taiwan, "Air Quality Management: 2025 air
+     quality statistics," 2026. [Online]. Available:
+     https://www.moenv.gov.tw/en/env-affairs/atmospheric-environment/air-quality/air-quality-management/2673.html
+
+[5]  Ministry of Environment (MOENV), Taiwan, "AQX_P_432: Real-Time Air Quality
+     Index (AQI) (Hourly)," MOENV Open Data Platform, 2026. [Online]. Available:
+     https://data.moenv.gov.tw/dataset/detail/AQX_P_432
+
+[6]  Ministry of Environment (MOENV), Taiwan, "AQX_P_488: Historical Air Quality
+     Index (AQI)," MOENV Open Data Platform, 2026. [Online]. Available:
+     https://data.moenv.gov.tw/dataset/detail/AQX_P_488
+
+[7]  Ministry of Environment (MOENV), Taiwan, "AQX_P_13: Hourly Air Quality
+     Monitoring Data (Updated Daily)," MOENV Open Data Platform, 2026. [Online].
+     Available: https://data.moenv.gov.tw/dataset/detail/AQX_P_13
+
+[8]  Ministry of Environment (MOENV), Taiwan, "AQX_P_07: Air Quality Monitoring
+     Station Basic Information," MOENV Open Data Platform, 2026. [Online].
+     Available: https://data.moenv.gov.tw/dataset/detail/AQX_P_07
+
+[9]  S. Steinle, S. Reis, and C. E. Sabel, "Spatial and temporal dynamics in air
+     pollution exposure assessment," Int. J. Environ. Res. Public Health, vol. 15,
+     no. 3, p. 558, Mar. 2018. [Online]. Available:
+     https://pmc.ncbi.nlm.nih.gov/articles/PMC5877103/
+
+[10] U.S. Environmental Protection Agency (EPA), "Frequent questions about air
+     sensors," Air Sensor Toolbox, 2024. [Online]. Available:
+     https://www.epa.gov/air-sensor-toolbox/frequent-questions-about-air-sensors
+
+[11] Ministry of Environment (MOENV), Taiwan, "Air Quality Index (AQI) standards,
+     sub-index breakpoints, and health activity recommendations (revised 2025),"
+     MOENV Air Quality Monitoring Network, 2025. [Online]. Available:
+     https://airtw.moenv.gov.tw/cht/Information/Standard/AirQualityIndicatorNew.aspx
+
+[12] E. Chianese and A. Riccio, "Air-quality forecasting across monitoring,
+     predictor, and validation regimes," Forecasting, vol. 8, no. 4, p. 72,
+     2026, doi: 10.3390/forecast8040072.
+
+[13] H. Hewamalage, K. Ackermann, and C. Bergmeir, "Forecast evaluation for data
+     scientists: Common pitfalls and best practices," Data Min. Knowl. Discov.,
+     vol. 37, pp. 788-832, 2023, doi: 10.1007/s10618-022-00894-5.
+
+[14] H. Lu and H. Lu, "Leakage-aware research design for interpretable PM2.5
+     prediction across urban air-quality monitoring sites," J. Adv. Res. Des.,
+     vol. 141, no. 1, pp. 329-340, 2026. [Online]. Available:
+     https://akademiabaru.com/submit/index.php/ard/article/view/6838
+
+[15] L. Berlinghieri et al., "Are hourly PM2.5 forecasts sufficiently accurate
+     to plan your day?," Bull. Amer. Meteorol. Soc. (BAMS), 2026,
+     doi: 10.1175/BAMS-D-24-0291.1.
+
+[16] S. Yao et al., "ReAct: Synergizing reasoning and acting in language models,"
+     in Proc. Int. Conf. Learn. Represent. (ICLR), 2023, pp. 1-33. [Online].
+     Available: https://arxiv.org/abs/2210.03629
+
+[17] Q. Nie and T. Liu, "Large language models: Tools for new environmental
+     decision-making," J. Environ. Manage., vol. 375, p. 124373, 2025,
+     doi: 10.1016/j.jenvman.2025.124373.
+
+[18] Open Worldwide Application Security Project (OWASP), "LLM01:2026 Prompt
+     Injection," OWASP GenAI Security Project, 2026. [Online]. Available:
+     https://genai.owasp.org/llm2026/llm012026-prompt-injection/
+
+[19] F. J. J. Joseph and S. Ganapathy, "Role of artificial intelligence and
+     learning techniques in time series forecast of PM2.5 data: An extensive
+     review," Franklin Open, vol. 13, p. 100372, 2025,
+     doi: 10.1016/j.fraope.2025.100372.
+
+[20] S. Makridakis, E. Spiliotis, and V. Assimakopoulos, "M5 accuracy
+     competition: Results, findings, and conclusions," Int. J. Forecast.,
+     vol. 38, no. 4, pp. 1346-1364, 2022, doi: 10.1016/j.ijforecast.2021.11.013.
+
+[21] S. M. Lundberg and S.-I. Lee, "A unified approach to interpreting model
+     predictions," in Adv. Neural Inf. Process. Syst. (NeurIPS), vol. 30, 2017,
+     pp. 4765-4774.
+
+[22] A. Houdou et al., "Interpretable machine learning approaches for forecasting
+     and predicting air pollution: A systematic review," Aerosol Air Qual. Res.,
+     vol. 24, p. 230151, 2024, doi: 10.4209/aaqr.230151.
+
+[23] K. Gao et al., "Instructor-Worker large language model system for policy
+     recommendation: A case study on air quality analysis of the January 2025
+     Los Angeles wildfires," Int. J. Appl. Earth Obs. Geoinf., vol. 143,
+     p. 104774, 2025, doi: 10.1016/j.jag.2025.104774.
+
+[24] K. Lo et al., "Integrating satellite information, land use regression, and
+     machine learning to estimate the spatiotemporal variation of ionic
+     composition in PM2.5 across Taiwan," Sci. Total Environ., vol. 994,
+     p. 180050, 2025, doi: 10.1016/j.scitotenv.2025.180050.
